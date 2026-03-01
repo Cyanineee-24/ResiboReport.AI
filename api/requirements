@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-multipart
+supabase
 google-generativeai
 pillow
-supabase
-
+python-dotenv

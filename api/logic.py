@@ -1,4 +1,5 @@
 import hashlib
+import datetime
 import json
 import os
 import io
@@ -36,7 +37,7 @@ def save_to_database(data: dict):
         response = supabase.table("resibo_ledger").insert({
             "reference_number": data.get("reference_number"),
             "amount": data.get("amount"),
-            "transaction_date": data.get("timestamp"),
+            "transaction_date": data.get("transaction_date"),
             "fingerprint": data.get("fingerprint")
         }).execute()
 
@@ -55,7 +56,7 @@ def process_receipt_image(image_bytes: bytes) -> dict:
     prompt = """Analyze this GCash receipt or local bank transfer screenshot. Extract the following fields into a clean JSON format:
     - reference_number (usually alphanumeric or 13-digit)
     - amount (numeric only, no currency symbols)
-    - timestamp (format: YYYY-MM-DD HH:MM)
+    - transaction_date (The ACTUAL date/time shown ON the receipt. Format: YYYY-MM-DD HH:MM)
     
     Return ONLY the raw JSON. No markdown blocks, no explanations."""
 
@@ -65,8 +66,12 @@ def process_receipt_image(image_bytes: bytes) -> dict:
         '```json', '').replace('```', '').strip()
     data = json.loads(clean_json)
 
+    if not data.get("transaction_date"):
+        data["transaction_date"] = datetime.datetime.now().strftime(
+            "%Y-%m-%d %H:%M")
+
     # Generate the Tamper-Proof Hash
-    raw_signature = f"{data.get('reference_number')}|{data.get('amount')}|{data.get('timestamp')}"
+    raw_signature = f"{data.get('reference_number')}|{data.get('amount')}|{data.get('transaction_date')}"
     digital_signature = hashlib.sha256(raw_signature.encode()).hexdigest()
 
     data['fingerprint'] = digital_signature
