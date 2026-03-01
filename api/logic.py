@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import google.generativeai as genai
 from PIL import Image
+from fastapi import HTTPException
 
 load_dotenv()
 
@@ -53,11 +54,12 @@ def process_receipt_image(image_bytes: bytes) -> dict:
     """Takes image bytes, extracts data via Gemini, and signs it."""
     img = Image.open(io.BytesIO(image_bytes))
 
-    prompt = """Analyze this GCash receipt or local bank transfer screenshot. Extract the following fields into a clean JSON format:
+    prompt = """Analyze this GCash transaction log or receipt screenshot. Extract the following fields into a clean JSON format:
     - reference_number (usually alphanumeric or 13-digit)
-    - amount (numeric only, no currency symbols)
-    - transaction_date (The ACTUAL date/time shown ON the receipt. Format: YYYY-MM-DD HH:MM)
-    
+    - amount (numeric only, but KEEP the negative '-' sign if it is present to indicate outgoing money. e.g., -500.00 or 250.00)
+    - transaction_date (Format: YYYY-MM-DD HH:MM)
+        
+    CRITICAL: Do NOT extract or include the sender_name due to data privacy.
     Return ONLY the raw JSON. No markdown blocks, no explanations."""
 
     response = model.generate_content([prompt, img])
@@ -66,19 +68,33 @@ def process_receipt_image(image_bytes: bytes) -> dict:
         '```json', '').replace('```', '').strip()
     data = json.loads(clean_json)
 
+    # THE FIX: Safely handle commas and convert to float
+    raw_amount = str(data.get("amount", "0")).replace(',', '')
+    amount_value = float(raw_amount)
+
+    if amount_value < 0:
+        # It's an outgoing log! Block it.
+        raise HTTPException(
+            status_code=400, detail="Outgoing transaction detected! Only incoming receipts are recorded.")
+
+    # Save the clean, comma-free number back to the dictionary for the database
+    data["amount"] = amount_value
+
     if not data.get("transaction_date"):
         data["transaction_date"] = datetime.datetime.now().strftime(
             "%Y-%m-%d %H:%M")
 
-    # Generate the Tamper-Proof Hash
+    # Generate the Tamper-Proof Hash (Kept beautifully simple)
     raw_signature = f"{data.get('reference_number')}|{data.get('amount')}|{data.get('transaction_date')}"
     digital_signature = hashlib.sha256(raw_signature.encode()).hexdigest()
 
     data['fingerprint'] = digital_signature
 
+    # Strict Data Privacy Enforcement
     if 'sender_name' in data:
         del data['sender_name']
 
     save_to_database(data)
 
     return data
+``
