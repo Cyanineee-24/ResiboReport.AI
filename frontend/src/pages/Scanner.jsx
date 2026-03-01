@@ -4,7 +4,8 @@ function App() {
   const [image, setImage] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [errorType, setErrorType] = useState(null); // Tracks if it's "outgoing" or a general error
   const videoRef = useRef(null);
   const canvasRef = useRef(null); // The hidden "film" to capture the frame
 
@@ -86,22 +87,31 @@ function App() {
         body: formData,
       });
 
+      // Read the JSON ONLY ONCE. This contains either your success data OR your error details.
+      const result = await response.json(); 
+
+      // Did the Python bouncer block it?
       if (!response.ok) {
-        throw new Error(`Server error! Status: ${response.status}`);
+        if (response.status === 400 && result.detail) {
+          // Throw the EXACT message Python sent us ("Outgoing transaction detected...")
+          throw new Error(result.detail);
+        } else {
+          // Fallback for general server errors
+          throw new Error(`Server error! Status: ${response.status}`);
+        }
       }
 
-      const data = await response.json();
-      console.log("Backend Reply:", data);
+      console.log("Backend Reply:", result);
       
-      setIsAnalyzing(false); // 2. Turn OFF spinner before success alert
-      alert(`Success! Python says: ${data.message}`);
+      setIsAnalyzing(false); // Turn OFF spinner before success alert
+      alert(`Success! Python says: ${result.message}`);
       
     } catch (error) {
       console.error("Connection Error:", error);
-      setIsAnalyzing(false); 
+      setIsAnalyzing(false); // Turn OFF spinner on error
       
       setTimeout(() => {
-        // This will now tell us the EXACT error message instead of a generic one!
+        // This will now perfectly display our custom Python rejection message!
         alert(`Request Failed: ${error.message}`); 
       }, 10);
     }

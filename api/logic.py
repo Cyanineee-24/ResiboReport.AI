@@ -97,4 +97,3 @@ def process_receipt_image(image_bytes: bytes) -> dict:
     save_to_database(data)
 
     return data
-``

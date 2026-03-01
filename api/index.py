@@ -61,5 +61,12 @@ async def extract_receipt(file: UploadFile = File(...)):
             "status": "success"
         }
 
+    except HTTPException as custom_error:
+        # THE FIX: Let our custom 400 "Outgoing" bouncer pass straight to React!
+        raise custom_error
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # If it's a REAL crash, print the exact reason to the terminal!
+        print(f"🚨 ACTUAL PYTHON CRASH: {e}")
+        raise HTTPException(
+            status_code=500, detail="Internal server error while processing image.")
