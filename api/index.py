@@ -3,7 +3,7 @@ This is the main file that Vercel will look for to start the Python server
 """
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from api.logic import process_receipt_image
+from api.logic import process_receipt_image, supabase
 
 
 # Initialize FastAPI app
@@ -26,6 +26,23 @@ app.add_middleware(
 @app.get("/api/python/health")
 def health_check():
     return {"status": "ResiboReport API is alive!"}
+
+
+@app.get("/api/python/reports")
+def get_reports():
+    """Fetches all receipt data from Supabase for the dashboard."""
+    try:
+        # Grab all records, sorted by date (oldest to newest) so charts flow left to right
+        response = supabase.table("resibo_ledger").select(
+            "*").order("transaction_date", desc=False).execute()
+
+        # Supabase returns the rows inside a 'data' attribute
+        return {"status": "success", "data": response.data}
+
+    except Exception as e:
+        print(f"Fetch Error: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch reports from database.")
 
 
 @app.post("/api/python/extract")
